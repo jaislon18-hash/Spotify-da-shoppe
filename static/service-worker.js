@@ -1,8 +1,18 @@
-// Soniq Service Worker
-const CACHE_NAME = 'soniq-cache-v2';
+// Soniq Service Worker v3
+const CACHE_NAME = 'soniq-cache-v3';
 
-// Em desenvolvimento local (localhost / 127.0.0.1), limpa caches e desregistra imediatamente
-if (typeof self !== 'undefined' && self.location && (self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1')) {
+// Em desenvolvimento local ou portas locais, limpa caches e desregistra imediatamente
+const isLocal =
+  typeof self !== 'undefined' &&
+  self.location &&
+  (self.location.hostname === 'localhost' ||
+   self.location.hostname === '127.0.0.1' ||
+   self.location.hostname.startsWith('192.168.') ||
+   self.location.hostname.startsWith('10.') ||
+   self.location.hostname.startsWith('172.') ||
+   self.location.port === '5173');
+
+if (isLocal) {
   self.addEventListener('install', () => {
     self.skipWaiting();
   });
@@ -42,6 +52,8 @@ if (typeof self !== 'undefined' && self.location && (self.location.hostname === 
     self.clients.claim();
   });
 
+  // Estratégia Network-First: Sempre busca a versão mais recente da rede primeiro!
+  // O cache serve apenas como contingência offline.
   self.addEventListener('fetch', (event) => {
     if (
       event.request.url.includes('youtube.com') ||
@@ -54,18 +66,18 @@ if (typeof self !== 'undefined' && self.location && (self.location.hostname === 
     }
 
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        return (
-          cached ||
-          fetch(event.request).then((response) => {
-            if (response && response.status === 200 && event.request.url.startsWith(self.location.origin)) {
-              const clone = response.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-            }
-            return response;
-          })
-        );
-      })
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200 && event.request.url.startsWith(self.location.origin)) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() => {
+          return caches.match(event.request);
+        })
     );
   });
 }
+

@@ -3,7 +3,7 @@
 	import { getSettings, saveSettings, db } from '$lib/db';
 	import { testApiKey } from '$lib/services/youtubeApi';
 	import { showToast } from '$lib/stores/toastStore';
-	import { X, Key, CheckCircle2, AlertCircle, ExternalLink, Trash2, HelpCircle, ShieldCheck } from '@lucide/svelte';
+	import { X, Key, CheckCircle2, AlertCircle, ExternalLink, Trash2, HelpCircle, ShieldCheck, RotateCw } from '@lucide/svelte';
 	import { onMount } from 'svelte';
 
 	let inputKey = $state(
@@ -24,6 +24,27 @@
 			inputKey = s.youtubeApiKey;
 		}
 	});
+
+	async function handleForceReload() {
+		showToast('Limpando cache e atualizando...', 'info');
+		if (typeof window !== 'undefined') {
+			if ('serviceWorker' in navigator) {
+				const registrations = await navigator.serviceWorker.getRegistrations();
+				for (const reg of registrations) {
+					await reg.unregister();
+				}
+			}
+			if ('caches' in window) {
+				const keys = await caches.keys();
+				for (const k of keys) {
+					await caches.delete(k);
+				}
+			}
+			setTimeout(() => {
+				window.location.reload();
+			}, 300);
+		}
+	}
 
 	async function handleTest() {
 		isTesting = true;
@@ -178,22 +199,33 @@
 			<div class="pt-4 border-t space-y-3" style="border-color: var(--color-border-subtle);">
 				<span class="block text-xs font-bold uppercase tracking-wider text-slate-400">Armazenamento Local (IndexedDB)</span>
 
-				<div class="flex items-center justify-between gap-3">
+				<div class="flex flex-wrap items-center justify-between gap-2.5">
 					<button
-						onclick={handleClearHistory}
-						class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border transition-all"
-						style="border-color: var(--color-border-subtle);"
+						onclick={handleForceReload}
+						class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-indigo-400 hover:bg-indigo-500/10 border border-indigo-500/30 transition-all active:scale-95"
+						title="Limpar cache do PWA e puxar versão mais recente"
 					>
-						<Trash2 class="w-3.5 h-3.5" />
-						<span>Limpar Histórico</span>
+						<RotateCw class="w-3.5 h-3.5" />
+						<span>Atualizar App</span>
 					</button>
 
-					<button
-						onclick={handleResetAll}
-						class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 transition-all"
-					>
-						<span>Redefinir Banco Local</span>
-					</button>
+					<div class="flex items-center gap-2">
+						<button
+							onclick={handleClearHistory}
+							class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border transition-all"
+							style="border-color: var(--color-border-subtle);"
+						>
+							<Trash2 class="w-3.5 h-3.5" />
+							<span>Limpar Histórico</span>
+						</button>
+
+						<button
+							onclick={handleResetAll}
+							class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 transition-all"
+						>
+							<span>Redefinir</span>
+						</button>
+					</div>
 				</div>
 			</div>
 
