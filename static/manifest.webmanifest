@@ -1,0 +1,26 @@
+{
+  "name": "Soniq - Player de Música Pessoal",
+  "short_name": "Soniq",
+  "description": "Seu player de música pessoal com catálogo online do YouTube e sem anúncios adicionais.",
+  "start_url": "/",
+  "id": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0c16",
+  "theme_color": "#6366f1",
+  "categories": ["music", "entertainment"],
+  "icons": [
+    {
+      "src": "/soniq-icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "128x128",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
