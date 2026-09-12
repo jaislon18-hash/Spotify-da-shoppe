@@ -82,6 +82,15 @@
 
 			<!-- Ações rápidas do mini-player -->
 			<div class="flex items-center gap-1 shrink-0">
+				<!-- Botão Vídeo Flutuante -->
+				<button
+					onclick={toggleVideoVisibility}
+					class="p-2 text-slate-400 hover:text-indigo-400 transition-colors"
+					title="Assistir clipe"
+				>
+					<Tv class="w-4 h-4 {$playerStore.isVideoVisible ? 'text-indigo-400' : ''}" />
+				</button>
+
 				<!-- Botão Favoritar -->
 				<button
 					onclick={toggleFavoriteCurrent}
@@ -167,10 +176,11 @@
 					</button>
 					<button
 						onclick={toggleVideoVisibility}
-						class="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs text-white border border-white/20 active:scale-95 transition-all shadow-md"
+						class="absolute bottom-3 right-3 px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-medium border active:scale-95 transition-all shadow-md {$playerStore.isVideoVisible ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-black/60 backdrop-blur-md border-white/20 text-white'}"
+						title="Exibir ou ocultar vídeo do YouTube"
 					>
-						<Tv class="w-3.5 h-3.5 text-indigo-400" />
-						<span>Vídeo</span>
+						<Tv class="w-3.5 h-3.5 {$playerStore.isVideoVisible ? 'text-white' : 'text-indigo-400'}" />
+						<span>{$playerStore.isVideoVisible ? 'Ocultar' : 'Vídeo'}</span>
 					</button>
 				</div>
 

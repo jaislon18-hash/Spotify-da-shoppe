@@ -12,7 +12,7 @@
 <!-- Mantido permanentemente montado no DOM para não reiniciar a reprodução nem ser suspenso pelo celular -->
 <div
 	class="transition-all duration-300 {$playerStore.isVideoVisible
-		? 'fixed bottom-24 right-4 md:right-6 z-50 w-[calc(100vw-2rem)] max-w-sm md:max-w-md aspect-video rounded-2xl overflow-hidden shadow-2xl border backdrop-blur-xl opacity-100 scale-100 pointer-events-auto'
+		? 'fixed top-16 md:top-auto md:bottom-24 left-4 right-4 md:left-auto md:right-6 z-[60] w-[calc(100vw-2rem)] max-w-sm md:max-w-md aspect-video rounded-2xl overflow-hidden shadow-2xl border backdrop-blur-xl opacity-100 scale-100 pointer-events-auto'
 		: 'fixed bottom-0 right-0 w-[160px] h-[90px] pointer-events-none overflow-hidden'}"
 	style="background-color: var(--color-surface-card); border-color: var(--color-border-subtle); {$playerStore.isVideoVisible ? '' : 'transform: scale(0.01); transform-origin: bottom right; z-index: 1;'}"
 >

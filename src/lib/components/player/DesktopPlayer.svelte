@@ -224,6 +224,18 @@
 				<Tv class="w-4 h-4" />
 			</button>
 
+			<!-- Botão Assistir Vídeo -->
+			<button
+				onclick={toggleVideoVisibility}
+				class="p-2 rounded-xl transition-all hover:scale-105 relative {$playerStore.isVideoVisible ? 'bg-indigo-600/20 text-indigo-400' : 'text-slate-400 hover:text-white'}"
+				title="Assistir clipe oficial no player flutuante"
+			>
+				<Tv class="w-4 h-4" />
+				{#if $playerStore.isVideoVisible}
+					<span class="absolute top-1 right-1 w-2 h-2 rounded-full bg-indigo-400"></span>
+				{/if}
+			</button>
+
 			<!-- Botão de Fila -->
 			<button
 				onclick={toggleQueueDrawer}
