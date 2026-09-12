@@ -11,6 +11,7 @@
 		setMobileExpanded,
 		toggleVideoVisibility,
 		toggleQueueDrawer,
+		toggleOledSleepMode,
 		formatTime
 	} from '$lib/stores/playerStore';
 	import { openAddToPlaylist } from '$lib/stores/appStore';
@@ -27,7 +28,8 @@
 		PlusCircle,
 		Tv,
 		ListMusic,
-		Loader2
+		Loader2,
+		Moon
 	} from '@lucide/svelte';
 
 	let isSeeking = $state(false);
@@ -156,8 +158,16 @@
 						class="w-full h-full object-cover"
 					/>
 					<button
+						onclick={toggleOledSleepMode}
+						class="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs text-white border border-white/20 active:scale-95 transition-all shadow-md"
+						title="Modo Economia OLED (Mantém música tocando com tela apagada)"
+					>
+						<Moon class="w-3.5 h-3.5 text-indigo-400" />
+						<span>Economia</span>
+					</button>
+					<button
 						onclick={toggleVideoVisibility}
-						class="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs text-white border border-white/20"
+						class="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs text-white border border-white/20 active:scale-95 transition-all shadow-md"
 					>
 						<Tv class="w-3.5 h-3.5 text-indigo-400" />
 						<span>Vídeo</span>

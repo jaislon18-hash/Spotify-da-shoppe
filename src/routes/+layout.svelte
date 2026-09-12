@@ -15,6 +15,7 @@
 	import MobilePlayer from '$lib/components/player/MobilePlayer.svelte';
 	import YouTubeIframe from '$lib/components/player/YouTubeIframe.svelte';
 	import QueuePanel from '$lib/components/player/QueuePanel.svelte';
+	import OledSleepOverlay from '$lib/components/player/OledSleepOverlay.svelte';
 
 	// Modais & Notificações
 	import Toast from '$lib/components/ui/Toast.svelte';
@@ -90,3 +91,7 @@
 
 <!-- Sistema de Notificações Toast -->
 <Toast />
+
+<!-- Modo Noturno / Economia de Bateria OLED em Tela Cheia -->
+<OledSleepOverlay />
+

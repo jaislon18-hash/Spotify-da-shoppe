@@ -21,6 +21,7 @@ export interface PlayerState {
 	isQueueOpen: boolean;
 	isMobileExpanded: boolean;
 	isCurrentFavorite: boolean;
+	isOledSleepMode: boolean;
 }
 
 const initialState: PlayerState = {
@@ -40,7 +41,8 @@ const initialState: PlayerState = {
 	isVideoVisible: false,
 	isQueueOpen: false,
 	isMobileExpanded: false,
-	isCurrentFavorite: false
+	isCurrentFavorite: false,
+	isOledSleepMode: false
 };
 
 export const playerStore = writable<PlayerState>(initialState);
@@ -49,44 +51,41 @@ export const playerStore = writable<PlayerState>(initialState);
 let ytPlayer: any = null;
 let timeUpdateInterval: any = null;
 let lastRecordedTrackId: string | null = null;
-
-// Áudio silencioso em loop contínuo para manter a sessão de mídia do navegador (Android/iOS) ativa em segundo plano
-const SILENT_AUDIO_URI =
-	'data:audio/wav;base64,UklGRkQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSAAAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
-
-let silentAudioEl: HTMLAudioElement | null = null;
 let userInitiatedPause = false;
-let backgroundResumeTimeout: any = null;
 let mediaSessionInitialized = false;
+let wakeLockSentinel: any = null;
 
-function getSilentAudio(): HTMLAudioElement | null {
-	if (typeof window === 'undefined') return null;
-	if (!silentAudioEl) {
-		silentAudioEl = new Audio(SILENT_AUDIO_URI);
-		silentAudioEl.loop = true;
-		silentAudioEl.volume = 0.001;
-	}
-	return silentAudioEl;
-}
-
-export function startSilentAudio() {
-	try {
-		const audio = getSilentAudio();
-		if (audio && audio.paused) {
-			const p = audio.play();
-			if (p !== undefined) {
-				p.catch(() => {});
+// Screen Wake Lock API — Impede que a tela do celular desligue automaticamente enquanto a música toca
+export async function requestWakeLock() {
+	if (typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
+		try {
+			if (!wakeLockSentinel) {
+				wakeLockSentinel = await (navigator as any).wakeLock.request('screen');
+				wakeLockSentinel.addEventListener('release', () => {
+					wakeLockSentinel = null;
+				});
 			}
+		} catch (e) {
+			// Ignora caso bloqueado pelo sistema operacional
 		}
-	} catch (e) {}
+	}
 }
 
-export function stopSilentAudio() {
-	try {
-		if (silentAudioEl && !silentAudioEl.paused) {
-			silentAudioEl.pause();
-		}
-	} catch (e) {}
+export function releaseWakeLock() {
+	if (wakeLockSentinel) {
+		try {
+			wakeLockSentinel.release();
+		} catch (e) {}
+		wakeLockSentinel = null;
+	}
+}
+
+export function toggleOledSleepMode() {
+	playerStore.update((s) => ({ ...s, isOledSleepMode: !s.isOledSleepMode }));
+}
+
+export function setOledSleepMode(enabled: boolean) {
+	playerStore.update((s) => ({ ...s, isOledSleepMode: enabled }));
 }
 
 function initMediaSession() {
@@ -180,32 +179,12 @@ function updateMediaSessionPlaybackState(state: 'playing' | 'paused' | 'none') {
 	} catch (e) {}
 }
 
-// Ouvinte de mudança de visibilidade (segundo plano no mobile)
+// Ouvinte de mudança de visibilidade (reconecta Wake Lock ao retornar para a tela)
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 	document.addEventListener('visibilitychange', () => {
 		const state = get(playerStore);
-		if (document.hidden) {
-			if (state.isPlaying && !userInitiatedPause) {
-				startSilentAudio();
-				setTimeout(() => {
-					if (!userInitiatedPause && ytPlayer && typeof ytPlayer.playVideo === 'function') {
-						try {
-							ytPlayer.playVideo();
-						} catch (e) {}
-					}
-				}, 120);
-			}
-		} else {
-			if (state.isPlaying && !userInitiatedPause) {
-				if (ytPlayer && typeof ytPlayer.getPlayerState === 'function') {
-					const YT = (window as any).YT;
-					if (YT && ytPlayer.getPlayerState() !== YT.PlayerState.PLAYING) {
-						try {
-							ytPlayer.playVideo();
-						} catch (e) {}
-					}
-				}
-			}
+		if (!document.hidden && state.isPlaying) {
+			requestWakeLock();
 		}
 	});
 }
@@ -289,7 +268,7 @@ function onPlayerStateChange(event: any) {
 		userInitiatedPause = false;
 		playerStore.update((s) => ({ ...s, isPlaying: true, isBuffering: false }));
 		startTimeTracker();
-		startSilentAudio();
+		requestWakeLock();
 		updateMediaSessionPlaybackState('playing');
 
 		// Registra no histórico ao tocar
@@ -299,30 +278,15 @@ function onPlayerStateChange(event: any) {
 			recordTrackPlay(current);
 		}
 	} else if (playerState === YT.PlayerState.PAUSED) {
-		// Se o celular foi bloqueado ou mudou de app (document.hidden) e o usuário NÃO clicou em pausar:
-		if (typeof document !== 'undefined' && document.hidden && !userInitiatedPause) {
-			console.log('[Soniq] Retomando áudio em segundo plano...');
-			startSilentAudio();
-			if (backgroundResumeTimeout) clearTimeout(backgroundResumeTimeout);
-			backgroundResumeTimeout = setTimeout(() => {
-				if (!userInitiatedPause && ytPlayer && typeof ytPlayer.playVideo === 'function') {
-					try {
-						ytPlayer.playVideo();
-					} catch (e) {}
-				}
-			}, 100);
-			return;
-		}
-
-		// Pausa intencional do usuário
 		playerStore.update((s) => ({ ...s, isPlaying: false, isBuffering: false }));
 		stopTimeTracker();
-		stopSilentAudio();
+		releaseWakeLock();
 		updateMediaSessionPlaybackState('paused');
 	} else if (playerState === YT.PlayerState.BUFFERING) {
 		playerStore.update((s) => ({ ...s, isBuffering: true }));
 	} else if (playerState === YT.PlayerState.ENDED) {
 		stopTimeTracker();
+		releaseWakeLock();
 		handleTrackEnded();
 	}
 }
@@ -394,7 +358,7 @@ function handleTrackEnded() {
 		loadAndPlayTrack(state.queue[0]);
 	} else {
 		playerStore.update((s) => ({ ...s, isPlaying: false, currentTime: 0, progressPercent: 0 }));
-		stopSilentAudio();
+		releaseWakeLock();
 		updateMediaSessionPlaybackState('none');
 	}
 }
@@ -438,7 +402,6 @@ export async function playTrack(track: Track, newQueue?: Track[]) {
 	}));
 
 	updateMediaSessionMetadata(track);
-	startSilentAudio();
 	loadAndPlayTrack(track);
 }
 
@@ -461,7 +424,7 @@ function loadAndPlayTrack(track: Track) {
 
 export function play() {
 	userInitiatedPause = false;
-	startSilentAudio();
+	requestWakeLock();
 	if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
 		try {
 			ytPlayer.playVideo();
@@ -473,10 +436,7 @@ export function play() {
 
 export function pause() {
 	userInitiatedPause = true;
-	if (backgroundResumeTimeout) {
-		clearTimeout(backgroundResumeTimeout);
-		backgroundResumeTimeout = null;
-	}
+	releaseWakeLock();
 	if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
 		try {
 			ytPlayer.pauseVideo();
@@ -484,7 +444,6 @@ export function pause() {
 	}
 	playerStore.update((s) => ({ ...s, isPlaying: false }));
 	stopTimeTracker();
-	stopSilentAudio();
 	updateMediaSessionPlaybackState('paused');
 }
 
@@ -520,7 +479,6 @@ export function playNext() {
 		userInitiatedPause = false;
 		playerStore.update((s) => ({ ...s, queueIndex: nextIndex, currentTrack: nextTrack }));
 		updateMediaSessionMetadata(nextTrack);
-		startSilentAudio();
 		isFavorite(nextTrack.id).then((fav) => {
 			playerStore.update((s) => ({ ...s, isCurrentFavorite: fav }));
 		});
@@ -552,7 +510,6 @@ export function playPrevious() {
 		userInitiatedPause = false;
 		playerStore.update((s) => ({ ...s, queueIndex: prevIndex, currentTrack: prevTrack }));
 		updateMediaSessionMetadata(prevTrack);
-		startSilentAudio();
 		isFavorite(prevTrack.id).then((fav) => {
 			playerStore.update((s) => ({ ...s, isCurrentFavorite: fav }));
 		});

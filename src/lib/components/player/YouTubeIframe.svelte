@@ -13,8 +13,8 @@
 <div
 	class="transition-all duration-300 {$playerStore.isVideoVisible
 		? 'fixed bottom-24 right-4 md:right-6 z-50 w-[calc(100vw-2rem)] max-w-sm md:max-w-md aspect-video rounded-2xl overflow-hidden shadow-2xl border backdrop-blur-xl opacity-100 scale-100 pointer-events-auto'
-		: 'fixed left-0 bottom-0 w-[240px] h-[135px] pointer-events-none -z-50 overflow-hidden'}"
-	style="background-color: var(--color-surface-card); border-color: var(--color-border-subtle); {$playerStore.isVideoVisible ? '' : 'opacity: 0.005;'}"
+		: 'fixed bottom-0 right-0 w-[160px] h-[90px] pointer-events-none overflow-hidden'}"
+	style="background-color: var(--color-surface-card); border-color: var(--color-border-subtle); {$playerStore.isVideoVisible ? '' : 'transform: scale(0.01); transform-origin: bottom right; z-index: 1;'}"
 >
 	{#if $playerStore.isVideoVisible}
 		<!-- Barra superior da janela de vídeo PiP -->
