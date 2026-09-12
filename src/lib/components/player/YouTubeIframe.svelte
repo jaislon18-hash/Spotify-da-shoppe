@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { initializeYouTubeApi, playerStore, toggleVideoVisibility } from '$lib/stores/playerStore';
-	import { Tv, X, Maximize2 } from '@lucide/svelte';
+	import { Tv, X } from '@lucide/svelte';
 
 	onMount(() => {
 		initializeYouTubeApi('soniq-yt-iframe');
@@ -9,13 +9,15 @@
 </script>
 
 <!-- Contêiner do Player Oficial do YouTube -->
-{#if $playerStore.isVideoVisible}
-	<!-- Janela flutuante PiP do Vídeo Oficial quando o usuário ativa o modo vídeo -->
-	<div
-		class="fixed bottom-24 right-6 z-50 w-80 md:w-96 aspect-video rounded-2xl overflow-hidden shadow-2xl border backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200"
-		style="background-color: var(--color-surface-card); border-color: var(--color-border-subtle);"
-	>
-		<!-- Barra de controle da janela de vídeo -->
+<!-- Mantido permanentemente montado no DOM para não reiniciar a reprodução nem ser suspenso pelo celular -->
+<div
+	class="transition-all duration-300 {$playerStore.isVideoVisible
+		? 'fixed bottom-24 right-4 md:right-6 z-50 w-[calc(100vw-2rem)] max-w-sm md:max-w-md aspect-video rounded-2xl overflow-hidden shadow-2xl border backdrop-blur-xl opacity-100 scale-100 pointer-events-auto'
+		: 'fixed left-0 bottom-0 w-[240px] h-[135px] pointer-events-none -z-50 overflow-hidden'}"
+	style="background-color: var(--color-surface-card); border-color: var(--color-border-subtle); {$playerStore.isVideoVisible ? '' : 'opacity: 0.005;'}"
+>
+	{#if $playerStore.isVideoVisible}
+		<!-- Barra superior da janela de vídeo PiP -->
 		<div class="flex items-center justify-between px-3 py-1.5 bg-black/60 backdrop-blur-md text-white text-xs">
 			<span class="flex items-center gap-1.5 font-medium truncate">
 				<Tv class="w-3.5 h-3.5 text-indigo-400" />
@@ -29,15 +31,10 @@
 				<X class="w-3.5 h-3.5" />
 			</button>
 		</div>
+	{/if}
 
-		<!-- Player Real -->
-		<div class="w-full h-[calc(100%-28px)] bg-black">
-			<div id="soniq-yt-iframe" class="w-full h-full"></div>
-		</div>
+	<!-- Frame oficial do YouTube com dimensões reais para não ser suspenso pelo navegador mobile -->
+	<div class="w-full {$playerStore.isVideoVisible ? 'h-[calc(100%-28px)]' : 'h-full'} bg-black">
+		<div id="soniq-yt-iframe" class="w-full h-full"></div>
 	</div>
-{:else}
-	<!-- Modo de áudio em segundo plano (O iframe permanece no DOM para continuar tocando, conforme termos do YouTube) -->
-	<div class="fixed -bottom-96 -right-96 opacity-0 pointer-events-none w-1 h-1 overflow-hidden" aria-hidden="true">
-		<div id="soniq-yt-iframe"></div>
-	</div>
-{/if}
+</div>

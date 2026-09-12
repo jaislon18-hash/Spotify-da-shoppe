@@ -50,6 +50,166 @@ let ytPlayer: any = null;
 let timeUpdateInterval: any = null;
 let lastRecordedTrackId: string | null = null;
 
+// Áudio silencioso em loop contínuo para manter a sessão de mídia do navegador (Android/iOS) ativa em segundo plano
+const SILENT_AUDIO_URI =
+	'data:audio/wav;base64,UklGRkQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSAAAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
+
+let silentAudioEl: HTMLAudioElement | null = null;
+let userInitiatedPause = false;
+let backgroundResumeTimeout: any = null;
+let mediaSessionInitialized = false;
+
+function getSilentAudio(): HTMLAudioElement | null {
+	if (typeof window === 'undefined') return null;
+	if (!silentAudioEl) {
+		silentAudioEl = new Audio(SILENT_AUDIO_URI);
+		silentAudioEl.loop = true;
+		silentAudioEl.volume = 0.001;
+	}
+	return silentAudioEl;
+}
+
+export function startSilentAudio() {
+	try {
+		const audio = getSilentAudio();
+		if (audio && audio.paused) {
+			const p = audio.play();
+			if (p !== undefined) {
+				p.catch(() => {});
+			}
+		}
+	} catch (e) {}
+}
+
+export function stopSilentAudio() {
+	try {
+		if (silentAudioEl && !silentAudioEl.paused) {
+			silentAudioEl.pause();
+		}
+	} catch (e) {}
+}
+
+function initMediaSession() {
+	if (typeof window === 'undefined' || !('mediaSession' in navigator) || mediaSessionInitialized) return;
+	mediaSessionInitialized = true;
+
+	try {
+		navigator.mediaSession.setActionHandler('play', () => {
+			play();
+		});
+		navigator.mediaSession.setActionHandler('pause', () => {
+			pause();
+		});
+		navigator.mediaSession.setActionHandler('previoustrack', () => {
+			playPrevious();
+		});
+		navigator.mediaSession.setActionHandler('nexttrack', () => {
+			playNext();
+		});
+		navigator.mediaSession.setActionHandler('seekto', (details) => {
+			if (details.seekTime !== undefined) {
+				seekTo(details.seekTime);
+			}
+		});
+		navigator.mediaSession.setActionHandler('seekforward', (details) => {
+			const st = get(playerStore);
+			const step = details.seekOffset || 10;
+			seekTo(Math.min(st.duration, st.currentTime + step));
+		});
+		navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+			const st = get(playerStore);
+			const step = details.seekOffset || 10;
+			seekTo(Math.max(0, st.currentTime - step));
+		});
+		navigator.mediaSession.setActionHandler('stop', () => {
+			pause();
+		});
+	} catch (err) {
+		console.warn('Erro ao inicializar MediaSession:', err);
+	}
+}
+
+export function updateMediaSessionMetadata(track: Track | null) {
+	if (typeof window === 'undefined' || !('mediaSession' in navigator)) return;
+	if (!track) {
+		navigator.mediaSession.playbackState = 'none';
+		return;
+	}
+
+	initMediaSession();
+
+	try {
+		navigator.mediaSession.metadata = new MediaMetadata({
+			title: track.title,
+			artist: track.artist,
+			album: 'Soniq Music',
+			artwork: [
+				{ src: track.thumbnail, sizes: '96x96', type: 'image/jpeg' },
+				{ src: track.thumbnail, sizes: '128x128', type: 'image/jpeg' },
+				{ src: track.thumbnail, sizes: '192x192', type: 'image/jpeg' },
+				{ src: track.thumbnail, sizes: '256x256', type: 'image/jpeg' },
+				{ src: track.thumbnail, sizes: '384x384', type: 'image/jpeg' },
+				{ src: track.thumbnail, sizes: '512x512', type: 'image/jpeg' }
+			]
+		});
+		navigator.mediaSession.playbackState = 'playing';
+	} catch (e) {
+		console.warn('Erro ao atualizar metadata do MediaSession:', e);
+	}
+}
+
+function updateMediaSessionPositionState() {
+	if (typeof window === 'undefined' || !('mediaSession' in navigator)) return;
+	if (!('setPositionState' in navigator.mediaSession)) return;
+	try {
+		const st = get(playerStore);
+		if (st.duration > 0 && !isNaN(st.duration)) {
+			navigator.mediaSession.setPositionState({
+				duration: Math.max(1, st.duration),
+				playbackRate: 1.0,
+				position: Math.min(Math.max(0, st.currentTime), st.duration)
+			});
+		}
+	} catch (e) {}
+}
+
+function updateMediaSessionPlaybackState(state: 'playing' | 'paused' | 'none') {
+	if (typeof window === 'undefined' || !('mediaSession' in navigator)) return;
+	try {
+		navigator.mediaSession.playbackState = state;
+	} catch (e) {}
+}
+
+// Ouvinte de mudança de visibilidade (segundo plano no mobile)
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+	document.addEventListener('visibilitychange', () => {
+		const state = get(playerStore);
+		if (document.hidden) {
+			if (state.isPlaying && !userInitiatedPause) {
+				startSilentAudio();
+				setTimeout(() => {
+					if (!userInitiatedPause && ytPlayer && typeof ytPlayer.playVideo === 'function') {
+						try {
+							ytPlayer.playVideo();
+						} catch (e) {}
+					}
+				}, 120);
+			}
+		} else {
+			if (state.isPlaying && !userInitiatedPause) {
+				if (ytPlayer && typeof ytPlayer.getPlayerState === 'function') {
+					const YT = (window as any).YT;
+					if (YT && ytPlayer.getPlayerState() !== YT.PlayerState.PLAYING) {
+						try {
+							ytPlayer.playVideo();
+						} catch (e) {}
+					}
+				}
+			}
+		}
+	});
+}
+
 // Inicializa a YouTube IFrame API
 export function initializeYouTubeApi(containerId = 'soniq-yt-iframe'): Promise<boolean> {
 	return new Promise((resolve) => {
@@ -126,8 +286,11 @@ function onPlayerStateChange(event: any) {
 	const playerState = event.data;
 
 	if (playerState === YT.PlayerState.PLAYING) {
+		userInitiatedPause = false;
 		playerStore.update((s) => ({ ...s, isPlaying: true, isBuffering: false }));
 		startTimeTracker();
+		startSilentAudio();
+		updateMediaSessionPlaybackState('playing');
 
 		// Registra no histórico ao tocar
 		const current = get(playerStore).currentTrack;
@@ -136,8 +299,26 @@ function onPlayerStateChange(event: any) {
 			recordTrackPlay(current);
 		}
 	} else if (playerState === YT.PlayerState.PAUSED) {
+		// Se o celular foi bloqueado ou mudou de app (document.hidden) e o usuário NÃO clicou em pausar:
+		if (typeof document !== 'undefined' && document.hidden && !userInitiatedPause) {
+			console.log('[Soniq] Retomando áudio em segundo plano...');
+			startSilentAudio();
+			if (backgroundResumeTimeout) clearTimeout(backgroundResumeTimeout);
+			backgroundResumeTimeout = setTimeout(() => {
+				if (!userInitiatedPause && ytPlayer && typeof ytPlayer.playVideo === 'function') {
+					try {
+						ytPlayer.playVideo();
+					} catch (e) {}
+				}
+			}, 100);
+			return;
+		}
+
+		// Pausa intencional do usuário
 		playerStore.update((s) => ({ ...s, isPlaying: false, isBuffering: false }));
 		stopTimeTracker();
+		stopSilentAudio();
+		updateMediaSessionPlaybackState('paused');
 	} else if (playerState === YT.PlayerState.BUFFERING) {
 		playerStore.update((s) => ({ ...s, isBuffering: true }));
 	} else if (playerState === YT.PlayerState.ENDED) {
@@ -171,6 +352,8 @@ function startTimeTracker() {
 				duration: duration || s.duration,
 				progressPercent: Math.min(100, Math.max(0, progress))
 			}));
+
+			updateMediaSessionPositionState();
 
 			// Salva periodicamente posição para restaurar sessão
 			const st = get(playerStore);
@@ -207,14 +390,18 @@ function handleTrackEnded() {
 	} else if (state.repeatMode === 'all' && state.queue.length > 0) {
 		// Reinicia a fila do começo
 		playerStore.update((s) => ({ ...s, queueIndex: 0 }));
+		updateMediaSessionMetadata(state.queue[0]);
 		loadAndPlayTrack(state.queue[0]);
 	} else {
 		playerStore.update((s) => ({ ...s, isPlaying: false, currentTime: 0, progressPercent: 0 }));
+		stopSilentAudio();
+		updateMediaSessionPlaybackState('none');
 	}
 }
 
 // Reproduz uma faixa específica, opcionalmente com nova fila
 export async function playTrack(track: Track, newQueue?: Track[]) {
+	userInitiatedPause = false;
 	const fav = await isFavorite(track.id);
 
 	let q = get(playerStore).queue;
@@ -250,11 +437,14 @@ export async function playTrack(track: Track, newQueue?: Track[]) {
 		progressPercent: 0
 	}));
 
+	updateMediaSessionMetadata(track);
+	startSilentAudio();
 	loadAndPlayTrack(track);
 }
 
 function loadAndPlayTrack(track: Track) {
 	if (!track || !track.id) return;
+	userInitiatedPause = false;
 
 	if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
 		try {
@@ -270,15 +460,23 @@ function loadAndPlayTrack(track: Track) {
 }
 
 export function play() {
+	userInitiatedPause = false;
+	startSilentAudio();
 	if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
 		try {
 			ytPlayer.playVideo();
 		} catch (e) {}
 	}
 	playerStore.update((s) => ({ ...s, isPlaying: true }));
+	updateMediaSessionPlaybackState('playing');
 }
 
 export function pause() {
+	userInitiatedPause = true;
+	if (backgroundResumeTimeout) {
+		clearTimeout(backgroundResumeTimeout);
+		backgroundResumeTimeout = null;
+	}
 	if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
 		try {
 			ytPlayer.pauseVideo();
@@ -286,6 +484,8 @@ export function pause() {
 	}
 	playerStore.update((s) => ({ ...s, isPlaying: false }));
 	stopTimeTracker();
+	stopSilentAudio();
+	updateMediaSessionPlaybackState('paused');
 }
 
 export function togglePlay() {
@@ -317,7 +517,10 @@ export function playNext() {
 
 	const nextTrack = state.queue[nextIndex];
 	if (nextTrack) {
+		userInitiatedPause = false;
 		playerStore.update((s) => ({ ...s, queueIndex: nextIndex, currentTrack: nextTrack }));
+		updateMediaSessionMetadata(nextTrack);
+		startSilentAudio();
 		isFavorite(nextTrack.id).then((fav) => {
 			playerStore.update((s) => ({ ...s, isCurrentFavorite: fav }));
 		});
@@ -346,7 +549,10 @@ export function playPrevious() {
 
 	const prevTrack = state.queue[prevIndex];
 	if (prevTrack) {
+		userInitiatedPause = false;
 		playerStore.update((s) => ({ ...s, queueIndex: prevIndex, currentTrack: prevTrack }));
+		updateMediaSessionMetadata(prevTrack);
+		startSilentAudio();
 		isFavorite(prevTrack.id).then((fav) => {
 			playerStore.update((s) => ({ ...s, isCurrentFavorite: fav }));
 		});
